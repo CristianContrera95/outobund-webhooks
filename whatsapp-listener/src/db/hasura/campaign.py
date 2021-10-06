@@ -15,7 +15,7 @@ class eventStatus(Enum):
 
 def update_msg(wpp_ids, status, error_desc, graphql):
     try:
-        graphql.query(f"""
+        result = graphql.query(f"""
           mutation UpdateStates {{
             update_campaign_contact(where: {{
               wpp_id: {{_in: {wpp_ids}}}
@@ -26,9 +26,14 @@ def update_msg(wpp_ids, status, error_desc, graphql):
               last_update: "{dt.datetime.now()}"
             }})
             {{
+              returning {{
+                campaing_id
+              }}
               affected_rows
             }}
           }}
         """.replace("'", '"'))
+
+        return result['update_campaign_contact']['returning'][0]['campaing_id']
     except TransportQueryError as err:
         raise InvalidData(f"Invalid wpp_id: {wpp_ids}")

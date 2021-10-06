@@ -2,6 +2,8 @@ import json
 import os
 import logging
 
+import boto3
+
 from settings import LOGGER_NAME # call to load env vars
 from core.messages import save_msg_results
 from db.hasura import GraphQL
@@ -13,22 +15,34 @@ logger = logging.getLogger(LOGGER_NAME)
 # instance connections to be reused by lambda
 def instance_conn(only: str = ''):
     graphql = None
+    lambda_client = None
     try:
         if only == 'gql' or only == '':
             logger.info("Instance graphql")
             graphql = GraphQL(os.getenv("HASURA_URL"), os.getenv("HASURA_TOKEN"))
 
+        if only == 'lambda' or only == '':
+            logger.info('Instance lambda client')
+            lambda_client = boto3.client('lambda',
+                                         aws_access_key_id=os.getenv("AWS_ACCESS_KEY"),
+                                         aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+                                         region_name='us-east-1'
+                                         )
+
     except Exception as ex:
         logger.exception("Lambda client cannot be created")
 
-    return graphql
+    return graphql, lambda_client
 
 def check_clients():
-    global graphql
+    global graphql, lambda_client
     if graphql is None:
         graphql, _ = instance_conn('gql')
+    if lambda_client is None:
+        _, lambda_client = instance_conn('lambda')
 
-graphql = instance_conn()
+
+graphql, lambda_client = instance_conn()
 
 
 def handle_campaign(event, context=None):
@@ -48,8 +62,7 @@ def handle_campaign(event, context=None):
 
         if wpp_id is not None and type == 'status':
 
-            save_msg_results(wpp_id, status, graphql, errors)
-
+            save_msg_results(wpp_id, status, graphql, lambda_client, errors)
         return {
             "statusCode": 200,
         }
